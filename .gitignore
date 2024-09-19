@@ -1,0 +1,34 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment folder
+venv/
+env/
+
+# macOS hidden files
+.DS_Store
+
+# Logs and database files
+*.log
+*.sqlite3
+
+# Environment variables
+.env
+
+# pytest cache
+.pytest_cache/
+
+# Coverage reports
+htmlcov/
+.coverage
+*.cover
+.cache
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+# IDE or editor config
+.vscode/
+.idea/
