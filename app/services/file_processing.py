@@ -3,8 +3,10 @@ import logging
 import nibabel as nib
 import numpy as np
 from PIL import Image
+from zipfile import ZipFile
 from app.services.s3 import upload_file_to_s3
 from fastapi import HTTPException, status
+import shutil
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -23,16 +25,37 @@ def process_nii_file(file_path: str, s3_key: str, bucket_name: str):
             "coronal": nii_data[:, :, :]
         }
 
+        # Create a local directory that mirrors the S3 key (excluding the file name)
+        base_dir = f"/tmp/{os.path.dirname(s3_key)}"
+        if not os.path.exists(base_dir):
+            os.makedirs(base_dir, exist_ok=True)
+
         metadata = {}
         for view, slices in views.items():
-            s3_folder = f"{os.path.dirname(s3_key)}/{view}/"
-            logger.info(f"Saving and uploading {view} slices to: {s3_folder}")
-            slice_count = save_and_upload_slices(slices, s3_folder, view, bucket_name)
+            view_dir = os.path.join(base_dir, view)
+            os.makedirs(view_dir, exist_ok=True)
+            logger.info(f"Saving {view} slices locally at: {view_dir}")
+            
+            slice_count = save_slices_locally(slices, view_dir, view)
             if slice_count > 0:
                 metadata[view] = {
                     "num_slices": slice_count,
-                    "folder_key": s3_folder
+                    "folder_key": f"{os.path.dirname(s3_key)}/{view}/"
                 }
+
+        # Zip the entire base directory (with subfolders for views)
+        zip_file_path = f"/tmp/{os.path.basename(os.path.dirname(s3_key))}_mri_slices.zip"
+        zip_slices(base_dir, zip_file_path)
+
+        # Upload the zip file to S3
+        s3_zip_key = f"{os.path.dirname(s3_key)}/mri_slices.zip"
+        upload_file_to_s3(zip_file_path, s3_zip_key, bucket_name)
+
+        # Clean up the local files
+        shutil.rmtree(base_dir)  # Remove the local folder with slices
+        os.remove(zip_file_path)  # Remove the zip file
+
+        metadata["zip_file_key"] = s3_zip_key
 
         return metadata
 
@@ -43,7 +66,7 @@ def process_nii_file(file_path: str, s3_key: str, bucket_name: str):
             detail=f"Failed to process .nii file: {str(e)}"
         )
 
-def save_and_upload_slices(slices, s3_folder, prefix, bucket_name):
+def save_slices_locally(slices, save_dir, prefix):
     slice_count = 0
     for i, slice in enumerate(slices):
         try:
@@ -53,18 +76,25 @@ def save_and_upload_slices(slices, s3_folder, prefix, bucket_name):
 
             # Convert to image and save locally
             img = Image.fromarray(slice_normalized)
-            local_file_path = f"/tmp/{prefix}_slice_{i}.jpg"
+            local_file_path = os.path.join(save_dir, f"{prefix}_slice_{i}.jpg")
             img.save(local_file_path)
             logger.info(f"Saved slice {i} locally at: {local_file_path}")
-
-            # Upload to S3
-            upload_file_to_s3(local_file_path, f"{s3_folder}{prefix}_slice_{i}.jpg", bucket_name)
-            logger.info(f"Uploaded slice {i} to S3 path: {s3_folder}{prefix}_slice_{i}.jpg")
             slice_count += 1
-
-            # Remove the local file after upload to save space
-            os.remove(local_file_path)
         except Exception as e:
             logger.error(f"Error processing slice {i}: {str(e)}")
 
     return slice_count
+
+def zip_slices(folder_path, zip_file_path):
+    try:
+        logger.info(f"Zipping folder: {folder_path}")
+        with ZipFile(zip_file_path, 'w') as zipf:
+            for root, dirs, files in os.walk(folder_path):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    arcname = os.path.relpath(file_path, folder_path)  # Relative path in zip
+                    zipf.write(file_path, arcname)
+        logger.info(f"Zipped folder into: {zip_file_path}")
+    except Exception as e:
+        logger.error(f"Error zipping folder {folder_path}: {str(e)}")
+        raise e
