@@ -55,9 +55,12 @@ def process_nii_file(file_path: str, s3_key: str, bucket_name: str):
         shutil.rmtree(base_dir)  # Remove the local folder with slices
         os.remove(zip_file_path)  # Remove the zip file
 
-        metadata["zip_file_key"] = s3_zip_key
+        data = {
+            "zip_file_key": s3_zip_key,  # Add the zip file key
+            "metadata": metadata  # Add the metadata object
+        }
 
-        return metadata
+        return data
 
     except Exception as e:
         logger.error(f"Failed to process .nii file: {str(e)}")
