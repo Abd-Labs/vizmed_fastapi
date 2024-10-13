@@ -7,10 +7,12 @@ from zipfile import ZipFile
 from app.services.s3 import upload_file_to_s3
 from fastapi import HTTPException, status
 import shutil
+from pathlib import Path
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(_name_)
+
 
 def process_nii_file(file_path: str, s3_key: str, bucket_name: str):
     try:
@@ -26,16 +28,17 @@ def process_nii_file(file_path: str, s3_key: str, bucket_name: str):
         }
 
         # Create a local directory that mirrors the S3 key (excluding the file name)
-        base_dir = f"/tmp/{os.path.dirname(s3_key)}"
-        if not os.path.exists(base_dir):
-            os.makedirs(base_dir, exist_ok=True)
+        # Fallback to current directory if TEMP not available
+        temp_dir = Path(os.getenv('TEMP', Path.cwd()))
+        base_dir = temp_dir / os.path.dirname(s3_key)
+        base_dir.mkdir(parents=True, exist_ok=True)
 
         metadata = {}
         for view, slices in views.items():
-            view_dir = os.path.join(base_dir, view)
-            os.makedirs(view_dir, exist_ok=True)
+            view_dir = base_dir / view
+            view_dir.mkdir(parents=True, exist_ok=True)
             logger.info(f"Saving {view} slices locally at: {view_dir}")
-            
+
             slice_count = save_slices_locally(slices, view_dir, view)
             if slice_count > 0:
                 metadata[view] = {
@@ -44,16 +47,17 @@ def process_nii_file(file_path: str, s3_key: str, bucket_name: str):
                 }
 
         # Zip the entire base directory (with subfolders for views)
-        zip_file_path = f"/tmp/{os.path.basename(os.path.dirname(s3_key))}_mri_slices.zip"
+        zip_file_path = temp_dir / \
+            f"{os.path.basename(os.path.dirname(s3_key))}_mri_slices.zip"
         zip_slices(base_dir, zip_file_path)
 
         # Upload the zip file to S3
         s3_zip_key = f"{os.path.dirname(s3_key)}/mri_slices.zip"
-        upload_file_to_s3(zip_file_path, s3_zip_key, bucket_name)
+        upload_file_to_s3(str(zip_file_path), s3_zip_key, bucket_name)
 
         # Clean up the local files
         shutil.rmtree(base_dir)  # Remove the local folder with slices
-        os.remove(zip_file_path)  # Remove the zip file
+        zip_file_path.unlink()  # Remove the zip file
 
         data = {
             "zip_file_key": s3_zip_key,  # Add the zip file key
@@ -69,17 +73,19 @@ def process_nii_file(file_path: str, s3_key: str, bucket_name: str):
             detail=f"Failed to process .nii file: {str(e)}"
         )
 
+
 def save_slices_locally(slices, save_dir, prefix):
     slice_count = 0
     for i, slice in enumerate(slices):
         try:
             # Normalize slice data to range 0-255 for image saving
-            slice_normalized = (slice - np.min(slice)) / (np.max(slice) - np.min(slice)) * 255
+            slice_normalized = (slice - np.min(slice)) / \
+                (np.max(slice) - np.min(slice)) * 255
             slice_normalized = slice_normalized.astype(np.uint8)
 
             # Convert to image and save locally
             img = Image.fromarray(slice_normalized)
-            local_file_path = os.path.join(save_dir, f"{prefix}_slice_{i}.jpg")
+            local_file_path = save_dir / f"{prefix}slice{i}.jpg"
             img.save(local_file_path)
             logger.info(f"Saved slice {i} locally at: {local_file_path}")
             slice_count += 1
@@ -88,14 +94,16 @@ def save_slices_locally(slices, save_dir, prefix):
 
     return slice_count
 
+
 def zip_slices(folder_path, zip_file_path):
     try:
         logger.info(f"Zipping folder: {folder_path}")
         with ZipFile(zip_file_path, 'w') as zipf:
             for root, dirs, files in os.walk(folder_path):
                 for file in files:
-                    file_path = os.path.join(root, file)
-                    arcname = os.path.relpath(file_path, folder_path)  # Relative path in zip
+                    file_path = Path(root) / file
+                    arcname = file_path.relative_to(
+                        folder_path)  # Relative path in zip
                     zipf.write(file_path, arcname)
         logger.info(f"Zipped folder into: {zip_file_path}")
     except Exception as e:
