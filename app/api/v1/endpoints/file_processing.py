@@ -3,6 +3,7 @@ from pydantic import BaseModel, Field
 import traceback
 import requests
 from app.services.file_processing import process_nii_file
+from app.services.common_services import get_local_file_path
 from app.services.s3 import download_file_from_s3
 import logging
 
@@ -40,8 +41,11 @@ async def file_processing(request: FileProcessingRequest, background_tasks: Back
 # Function to process the file and send metadata back to Node.js
 def process_file(s3_key: str, bucket_name: str, callback_url: str, user_id: str, patient_id: str, mriFileId: str):
     try:
+        
+        local_file_path = get_local_file_path(s3_key)
+
         # Download and process the file
-        file_path = download_file_from_s3(s3_key, bucket_name)
+        file_path = download_file_from_s3(s3_key, bucket_name,local_file_path)
         result = process_nii_file(file_path, s3_key, bucket_name)  # Contains both metadata and zip_file_key
 
         # Construct the payload with the required fields
@@ -68,34 +72,3 @@ def process_file(s3_key: str, bucket_name: str, callback_url: str, user_id: str,
         logger.error(f"General error occurred while processing file: {str(e)}")
         logger.error(f"Error details: {traceback.format_exc()}")
 
-
-
-
-
-
-
-
-
-
-
-
-        #   payload = {
-        #     "zip_file_key": 'mri/doctors/66e5ab10ec6ce9fb37690528/patients/66f9262195680015b732423d/mri_slices.zip',
-        #     "metadata":{
-        #         "axial": {
-        #             "num_slices": 120,
-        #             "folder_key": "mri/doctors/66e5ab10ec6ce9fb37690528/patients/66e5ae13ec6ce9fb3769056e/axial/"
-        #         },
-        #         "sagittal": {
-        #             "num_slices": 110,
-        #             "folder_key": "mri/doctors/66e5ab10ec6ce9fb37690528/patients/66e5ae13ec6ce9fb3769056e/sagittal/"
-        #         },
-        #         "coronal": {
-        #             "num_slices": 115,
-        #             "folder_key": "mri/doctors/66e5ab10ec6ce9fb37690528/patients/66e5ae13ec6ce9fb3769056e/coronal/"
-        #         }
-        #     },
-        #     "user_id": user_id,
-        #     "patient_id": patient_id,
-        #     "mriFileId": mriFileId
-        #     }

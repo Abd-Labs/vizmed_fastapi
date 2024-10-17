@@ -11,7 +11,7 @@ from pathlib import Path
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(_name_)
+logger = logging.getLogger(__name__)
 
 
 def process_nii_file(file_path: str, s3_key: str, bucket_name: str):

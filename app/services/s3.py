@@ -8,7 +8,7 @@ from pathlib import Path
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(_name_)
+logger = logging.getLogger(__name__)
 
 # Initialize the S3 client
 s3_client = boto3.client(
@@ -19,12 +19,12 @@ s3_client = boto3.client(
 )
 
 
-def download_file_from_s3(s3_key: str, bucket_name: str):
+def download_file_from_s3(s3_key: str, bucket_name: str, local_file_path: Path):
     try:
-        # Use Path to construct a cross-platform file path
-        # Default to current working directory if TEMP is unavailable
-        temp_dir = Path(os.getenv('TEMP', Path.cwd()))
-        local_file_path = temp_dir / os.path.basename(s3_key)
+        
+        # Ensure the directory exists
+        local_file_path.parent.mkdir(parents=True, exist_ok=True)
+
 
         logger.info(f"Downloading file from S3: s3://{bucket_name}/{s3_key}")
         s3_client.download_file(bucket_name, s3_key, str(local_file_path))
@@ -32,6 +32,7 @@ def download_file_from_s3(s3_key: str, bucket_name: str):
             f"File downloaded successfully. Local path: {local_file_path}")
 
         return str(local_file_path)
+    
     except NoCredentialsError:
         logger.error("S3 credentials are missing or incorrect.")
         raise HTTPException(
