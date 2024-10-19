@@ -6,6 +6,7 @@ from PIL import Image
 from zipfile import ZipFile
 from app.services.s3 import upload_file_to_s3
 from fastapi import HTTPException, status
+from app.services.common_services import create_temp_directory,delete_temp_directory
 import shutil
 from pathlib import Path
 
@@ -27,11 +28,7 @@ def process_nii_file(file_path: str, s3_key: str, bucket_name: str):
             "coronal": nii_data[:, :, :]
         }
 
-        # Create a local directory that mirrors the S3 key (excluding the file name)
-        # Fallback to current directory if TEMP not available
-        temp_dir = Path(os.getenv('TEMP', Path.cwd()))
-        base_dir = temp_dir / os.path.dirname(s3_key)
-        base_dir.mkdir(parents=True, exist_ok=True)
+        base_dir = create_temp_directory(s3_key)
 
         metadata = {}
         for view, slices in views.items():
@@ -47,7 +44,7 @@ def process_nii_file(file_path: str, s3_key: str, bucket_name: str):
                 }
 
         # Zip the entire base directory (with subfolders for views)
-        zip_file_path = temp_dir / \
+        zip_file_path = base_dir / \
             f"{os.path.basename(os.path.dirname(s3_key))}_mri_slices.zip"
         zip_slices(base_dir, zip_file_path)
 
@@ -55,9 +52,10 @@ def process_nii_file(file_path: str, s3_key: str, bucket_name: str):
         s3_zip_key = f"{os.path.dirname(s3_key)}/mri_slices.zip"
         upload_file_to_s3(str(zip_file_path), s3_zip_key, bucket_name)
 
-        # Clean up the local files
-        shutil.rmtree(base_dir)  # Remove the local folder with slices
         zip_file_path.unlink()  # Remove the zip file
+
+        # Clean up the local files
+        delete_temp_directory(base_dir)  # Remove the patient-specific temp directory
 
         data = {
             "zip_file_key": s3_zip_key,  # Add the zip file key

@@ -52,8 +52,23 @@ def classify_mri_file(s3_key: str, bucket_name: str, local_file_path):
     coronal_prediction = coronal_model.predict(coronal_input)
     sagittal_prediction = sagittal_model.predict(sagittal_input)
 
-    result = ensemble_predictions(axial_prediction, coronal_prediction, sagittal_prediction)
+    # Get class labels as strings
+    axial_class_label = get_class_label(axial_prediction)
+    coronal_class_label = get_class_label(coronal_prediction)
+    sagittal_class_label = get_class_label(sagittal_prediction)
+
+
+    ensemble_result = ensemble_predictions(axial_prediction, coronal_prediction, sagittal_prediction)
+
+    result = {
+        "axial_classification": axial_class_label,
+        "coronal_classification": coronal_class_label,
+        "sagittal_classification": sagittal_class_label,
+        "ensemble_prediction": ensemble_result
+    }
+
     logger.info(f"Prediction result: {result}")
+
     return result
 
 

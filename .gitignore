@@ -32,3 +32,6 @@ htmlcov/
 # IDE or editor config
 .vscode/
 .idea/
+
+mri
+temp

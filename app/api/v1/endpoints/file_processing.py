@@ -57,7 +57,6 @@ def process_file(s3_key: str, bucket_name: str, callback_url: str, user_id: str,
             "mriFileId": mriFileId
         }
 
-      
         # Send the payload to the Node.js callback URL
         response = requests.post(callback_url, json=payload)
 

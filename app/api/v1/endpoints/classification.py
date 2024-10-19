@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException,BackgroundTasks
 from pydantic import BaseModel
 from app.services.classification_services import classify_mri_file
-from app.services.common_services import get_local_file_path, delete_local_directory
+from app.services.common_services import get_local_file_path, delete_local_file
 router = APIRouter()
 
 # Request model for classification
@@ -22,11 +22,8 @@ async def classify_mri(request: ClassificationRequest, background_tasks: Backgro
         # Call the classify function with s3_key and bucket_name
         result = classify_mri_file(request.s3_key, request.bucket_name, local_file_path)
 
-        # Schedule deletion of the file after the classification is done
-        background_tasks.add_task(delete_local_directory, local_file_path)
-
-
-        return {"classification": result}
+        delete_local_file(local_file_path)
+        return {"data": result}
     
     except FileNotFoundError as e:
 
@@ -34,5 +31,4 @@ async def classify_mri(request: ClassificationRequest, background_tasks: Backgro
     
     except Exception as e:
 
-        raise HTTPException(
-            status_code=500, detail="An error occurred during classification")
+        raise HTTPException(status_code=500, detail="An error occurred during classification")
