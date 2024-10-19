@@ -5,6 +5,8 @@ import requests
 from app.services.file_processing import process_nii_file
 from app.services.common_services import get_local_file_path
 from app.services.s3 import download_file_from_s3
+from app.core.config import settings
+import platform
 import logging
 
 router = APIRouter()
@@ -22,12 +24,22 @@ class FileProcessingRequest(BaseModel):
 @router.post("/file-processing", status_code=status.HTTP_202_ACCEPTED)
 async def file_processing(request: FileProcessingRequest, background_tasks: BackgroundTasks):
     try:
+
+        adjusted_callback_url = request.callback_url
+
+        if settings.IS_DOCKER and "localhost" in request.callback_url:
+                # Adjust callback URL based on OS
+                if platform.system() in ["Darwin", "Windows"]:
+                    adjusted_callback_url = request.callback_url.replace("localhost", "host.docker.internal")
+                elif platform.system() == "Linux":
+                    adjusted_callback_url = request.callback_url.replace("localhost", "172.17.0.1")
+
         # Schedule file processing in the background
         background_tasks.add_task(
             process_file, 
             request.s3_key, 
             request.bucket_name, 
-            request.callback_url, 
+            adjusted_callback_url, 
             request.user_id,
             request.patient_id,
             request.mriFileId
