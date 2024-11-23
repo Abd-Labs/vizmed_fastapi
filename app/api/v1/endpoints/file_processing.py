@@ -18,7 +18,7 @@ class FileProcessingRequest(BaseModel):
     bucket_name: str = Field(..., description="S3 bucket name containing the file.")
     callback_url: str = Field(..., description="Node.js server callback URL to send metadata.")
     user_id: str = Field(..., description="ID of the user the MRI belongs to.")
-    patient_id: str = Field(..., description="ID of the patient the MRI belongs to.")
+    resource_id: str = Field(..., description="ID of the resource the MRI belongs to.")
     mriFileId: str = Field(..., description="ID of MRI file object saved in MongoDB")
 
 @router.post("/file-processing", status_code=status.HTTP_202_ACCEPTED)
@@ -41,7 +41,7 @@ async def file_processing(request: FileProcessingRequest, background_tasks: Back
             request.bucket_name, 
             adjusted_callback_url, 
             request.user_id,
-            request.patient_id,
+            request.resource_id,
             request.mriFileId
         )
 
@@ -51,7 +51,7 @@ async def file_processing(request: FileProcessingRequest, background_tasks: Back
         raise HTTPException(status_code=500, detail=f"Error starting file processing: {str(e)}")
 
 # Function to process the file and send metadata back to Node.js
-def process_file(s3_key: str, bucket_name: str, callback_url: str, user_id: str, patient_id: str, mriFileId: str):
+def process_file(s3_key: str, bucket_name: str, callback_url: str, user_id: str, resource_id: str, mriFileId: str):
     try:
         
         local_file_path = get_local_file_path(s3_key)
@@ -65,7 +65,7 @@ def process_file(s3_key: str, bucket_name: str, callback_url: str, user_id: str,
             "zip_file_key": result["zip_file_key"],
             "metadata": result["metadata"],
             "user_id": user_id,
-            "patient_id": patient_id,
+            "resource_id": resource_id,
             "mriFileId": mriFileId
         }
 
