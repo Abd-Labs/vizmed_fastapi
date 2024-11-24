@@ -15,11 +15,11 @@ def get_local_file_path(s3_key: str) -> Path:
     s3_parts = Path(s3_key).parts
 
     # Assuming the patient ID is the last part before the file name
-    patient_id = s3_parts[-2]
+    resource_id = s3_parts[-2]
     file_name = s3_parts[-1]
 
     # Create the local directory path as root_dir/mri/patient_id
-    local_dir_path = root_dir / 'mri' / patient_id / file_name
+    local_dir_path = root_dir / 'mri' / resource_id / file_name
 
     return local_dir_path
 
