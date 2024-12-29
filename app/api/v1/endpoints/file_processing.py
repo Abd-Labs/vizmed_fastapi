@@ -68,7 +68,8 @@ def process_file(s3_key: str, bucket_name: str, callback_url: str, user_id: str,
             "resource_id": resource_id,
             "mriFileId": mriFileId
         }
-
+        
+        logger.info(f"Webhook Triggered: Sending payload {payload} to the URL {callback_url} through POST request")
         # Send the payload to the Node.js callback URL
         response = requests.post(callback_url, json=payload)
 
