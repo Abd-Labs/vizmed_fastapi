@@ -39,10 +39,12 @@ def classify_mri_file(s3_key: str, bucket_name: str, local_file_path):
         download_file_from_s3(s3_key, bucket_name, local_file_path)
 
     logger.info(f"Classifying MRI file: {local_file_path}")
-    
-    # The rest of the code is unchanged, using local_file_path
-    axial_slice, coronal_slice, sagittal_slice = get_middle_slices(local_file_path)
 
+    # Extract middle slices with consistent orientation
+    axial_slice, coronal_slice, sagittal_slice = get_middle_slices(
+        local_file_path)
+
+    # Preprocess slices for classification
     axial_input = preprocess_slice(axial_slice)
     coronal_input = preprocess_slice(coronal_slice)
     sagittal_input = preprocess_slice(sagittal_slice)
@@ -57,8 +59,9 @@ def classify_mri_file(s3_key: str, bucket_name: str, local_file_path):
     coronal_class_label = get_class_label(coronal_prediction)
     sagittal_class_label = get_class_label(sagittal_prediction)
 
-
-    ensemble_result = ensemble_predictions(axial_prediction, coronal_prediction, sagittal_prediction)
+    # Ensemble predictions from all planes
+    ensemble_result = ensemble_predictions(
+        axial_prediction, coronal_prediction, sagittal_prediction)
 
     result = {
         "axial_classification": axial_class_label,
@@ -75,7 +78,7 @@ def classify_mri_file(s3_key: str, bucket_name: str, local_file_path):
 def rescale_slice(slice_data):
     logger.info("Rescaling slice data to [0, 1] range.")
     slice_data = slice_data.astype(np.float32)
-    slice_data = slice_data / 255.0
+    slice_data = slice_data / np.max(slice_data)
     return slice_data
 
 
@@ -94,23 +97,42 @@ def determine_axes(affine):
     return plane_to_axis
 
 
+def reorient_to_ras(nii_image):
+    """Reorient NIfTI data to RAS standard."""
+    data = nii_image.get_fdata()
+    shape = data.shape
+
+    if len(shape) < 3:
+        # Skip reorientation if the data is not 3D
+        logger.warning("Data is not 3D. Skipping reorientation.")
+        return data, None
+
+    # Reorient to RAS if the data is 3D
+    ras_orientation = nib.orientations.io_orientation(nii_image.affine)
+    ras_transform = nib.orientations.ornt_transform(
+        ras_orientation, nib.orientations.axcodes2ornt(("R", "A", "S")))
+    reoriented_data = nib.orientations.apply_orientation(data, ras_transform)
+
+    return reoriented_data, ras_orientation
+
+
 def get_middle_slices(nii_file_path):
-    logger.info(f"Loading MRI file: {nii_file_path}")
+    logger.info(f"Loading and reorienting MRI file: {nii_file_path}")
     nii_image = nib.load(nii_file_path)
-    nii_data = nii_image.get_fdata()
+    data, _ = reorient_to_ras(nii_image)
 
-    affine = nii_image.affine
-    plane_to_axis = determine_axes(affine)
+    if len(data.shape) < 3:
+        logger.warning("Data is 2D. Using the single slice for all views.")
+        return data, data, data
 
-    logger.info(
-        "Extracting middle slices from axial, coronal, and sagittal planes.")
-    mid_axial = nii_data.shape[plane_to_axis['S']] // 2
-    mid_coronal = nii_data.shape[plane_to_axis['A']] // 2
-    mid_sagittal = nii_data.shape[plane_to_axis['R']] // 2
+    # Extract middle slices for 3D data
+    mid_axial = data.shape[2] // 2
+    mid_coronal = data.shape[1] // 2
+    mid_sagittal = data.shape[0] // 2
 
-    axial_slice = np.take(nii_data, mid_axial, axis=plane_to_axis['S'])
-    coronal_slice = np.take(nii_data, mid_coronal, axis=plane_to_axis['A'])
-    sagittal_slice = np.take(nii_data, mid_sagittal, axis=plane_to_axis['R'])
+    axial_slice = np.rot90(data[:, :, mid_axial])
+    coronal_slice = np.rot90(data[:, mid_coronal, :])
+    sagittal_slice = np.rot90(data[mid_sagittal, :, :])
 
     return axial_slice, coronal_slice, sagittal_slice
 

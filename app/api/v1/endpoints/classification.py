@@ -22,7 +22,7 @@ async def classify_mri(request: ClassificationRequest, background_tasks: Backgro
         # Call the classify function with s3_key and bucket_name
         result = classify_mri_file(request.s3_key, request.bucket_name, local_file_path)
 
-        delete_local_file(local_file_path)
+        # delete_local_file(local_file_path)
         return {"data": result}
     
     except FileNotFoundError as e:
